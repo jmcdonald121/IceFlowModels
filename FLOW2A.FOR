@@ -1,0 +1,128 @@
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+C                                                                      C
+C     ***FLOW2A.FORT***   **18-07-88**                                 C
+C                                                                      C
+C     THIS IS A FORWARD ICE FLOW MODEL IN ONE DIMENSION. THIS USES     C
+C     THE DIFFERENCING OF THE DISCHARGES FOR THE CONTINUITY            C
+C     EQUATION                                                         C
+C                                                                      C
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+      IMPLICIT REAL*8 (A-H,O-Z)
+      DIMENSION H(101),U(101),DIS(101),UNEW(101),DISNEW(101),
+     1CHGTHK(101),OLDH(101),SLOPE(101)
+      PARAMETER (BDOT=9.6D-09,A=5.2D-25,TB=0.1D06,XN=3.0D0,
+     1T=3.1536D07,RHO=1.D03,G=9.8,D=1.0D06,SECYR=3.1536D07,NX=10)
+CCCCCCCCCCCCCCCCCCCCCC
+CCCCCCCCCCCCCCCCCCCCCC
+C ZERO ALL VARIABLES C
+CCCCCCCCCCCCCCCCCCCCCC
+CCCCCCCCCCCCCCCCCCCCCC
+      DT=T/4.0D0
+      DX=D/DBLE(NX)
+      X=0.0D0
+      TOL=2.0D0
+      LIM=0
+      ITEST=0
+      SAVE=0.0D0
+      CHGMAX=0.0D0
+      U(1)=0.0D0
+      DO 9 I=1,NX+1
+      CHGTHK(I)=0.0D0
+      U(I)=0.0D0
+      H(I)=0.0D0
+      DIS(I)=0.0D0
+      UNEW(I)=0.0D0
+      DISNEW(I)=0.0D0
+      OLDH(I)=0.0D0
+9     CONTINUE
+CCCCCCCCCCCCCCCCCCCCCCCCCC
+CCCCCCCCCCCCCCCCCCCCCCCCCC
+C SET INITIAL CONDITIONS C
+CCCCCCCCCCCCCCCCCCCCCCCCCC
+CCCCCCCCCCCCCCCCCCCCCCCCCC
+C SET UP INITIAL PROFILE
+      DO 10 I=1,NX+1
+      H(I)=DSQRT(2*TB/(RHO*G)*(D+2.0D0*DX/10.0D0-X))
+      X=X+DX
+      OLDH(I)=H(I)
+10    CONTINUE
+      BOTTOM=H(NX+1)
+CCCCCCCCCCCCCCCCCCCCCCCCCC
+CCCCCCCCCCCCCCCCCCCCCCCCCC
+C PERFORM ITERATION      C
+CCCCCCCCCCCCCCCCCCCCCCCCCC
+CCCCCCCCCCCCCCCCCCCCCCCCCC
+C---------ITERATION STATEMENT----------------------------------------C
+50    IF(TOL.LE.1.0D-03.OR.LIM.GE.100000.OR.ITEST.NE.0) GOTO 100
+      TOL=0.0D0
+      LIM=LIM+1
+C---------COMPUTE VELOCITIES-----------------------------------------C
+      DO 20 I=1,NX+1
+      OLDH(I)=H(I)
+      IF(I.EQ.1) THEN
+      U(1)=0.0D0
+      ELSEIF(I.EQ.NX+1) THEN
+      U(NX+1)=2.0D0*A*((-RHO*G*(H(NX-1)-4.0D0*H(NX)+3.0D0*H(NX+1))/
+     1(2.0D0*DX))**XN)*(H(NX+1)**(XN+1))/(XN+2)
+      ELSE
+      U(I)=2.0D0*A*((-RHO*G*(H(I+1)-H(I-1))/(2.0D0*DX))**XN)*
+     1(H(I)**(XN+1))/(XN+2)
+      ENDIF
+      UNEW(I)=U(I)*SECYR
+      DISNEW(I)=U(I)*H(I)*(1.0D0)*SECYR
+20    CONTINUE
+C---------COMPUTE THICKNESSES----------------------------------------C
+      DO 13 I=1,NX+1
+      SAVE=H(I)
+      IF(I.EQ.1) THEN
+      H(1)=(-2.0D0*U(2)*OLDH(2)/(2.0D0*DX)+BDOT)*DT+OLDH(1)
+      ELSEIF(I.EQ.NX+1) THEN
+      H(NX+1)=BOTTOM
+      ELSE
+      H(I)=((-U(I+1)*OLDH(I+1)+OLDH(I-1)*U(I-1))
+     1/(2.0D0*DX)+BDOT)*DT+OLDH(I)
+      ENDIF
+      CHGTHK(I)=H(I)-SAVE
+      CHGMAX=DABS(CHGTHK(I))
+      IF(TOL.LT.CHGMAX) TOL=CHGMAX
+13    CONTINUE
+C---------TEST SECTION-----------------------------------------------C
+      DO 21 I=1,NX+1
+      IF(UNEW(I).LT.0.0D0.OR.UNEW(I).GT.2.0D03) ITEST=1
+      IF(I.NE.NX+1.AND.(H(I)-H(I+1)).LT.0.0D0) ITEST=2
+21    CONTINUE
+      WRITE(0,902) LIM
+      GOTO 50
+100   CONTINUE
+C---------COMPUTE VELOCITIES FOR OUTPUT------------------------------C
+      DO 80 I=1,NX+1
+      IF(I.EQ.1) THEN
+      U(1)=0.0D0
+      ELSEIF(I.EQ.NX+1) THEN
+      U(NX+1)=2.0D0*A*((-RHO*G*(H(NX-1)-4.0D0*H(NX)+3.0D0*H(NX+1))/
+     1(2.0D0*DX))**XN)*(H(NX+1)**(XN+1))/(XN+2)
+      ELSE
+      U(I)=2.0D0*A*((-RHO*G*(H(I+1)-H(I-1))/(2.0D0*DX))**XN)*
+     1(H(I)**(XN+1))/(XN+2)
+      ENDIF
+      UNEW(I)=U(I)*SECYR
+      DISNEW(I)=U(I)*H(I)*(1.0D0)*SECYR
+80    CONTINUE
+CCCCCCCCCCCCCCCCCCCCCCCCCC
+C WRITE THE OUTPUT       C
+CCCCCCCCCCCCCCCCCCCCCCCCCC
+      OPEN(2,FILE='FLOW2A.DAT',STATUS='NEW')
+      DO 14 I=1,NX+1
+      WRITE(0,901) I,H(I),UNEW(I),DISNEW(I),CHGTHK(I)
+      WRITE(2,901) I,H(I),UNEW(I),DISNEW(I),CHGTHK(I)
+901   FORMAT(' ','I=',I3,3X,'H=',D15.7,5X,'U=',D15.7,5X,
+     1'DISCHARGE=',D15.7,5X,'DELTHK=',D15.7)
+14    CONTINUE
+      WRITE(0,902) LIM
+      WRITE(2,902) LIM
+902   FORMAT(' ','THE NUMBER OF ITERATIONS =',I8)
+      WRITE(0,77) ITEST
+77    FORMAT(' ','ITEST= ',I3)
+      STOP
+      END
+
